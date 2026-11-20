@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CONTROL GENERAL 4 RELES</title>
+  <link rel="stylesheet" href="style.css">
+  <head>
+    <meta charset="UTF-8">
+    <title>CONTROL GENERAL 4 RELES</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    
+    <!-- Configuración App Móvil (Android e iOS) -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0A1128">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="4 Relés">
+    <link rel="apple-touch-icon" href="icon-512.png">
+
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+    
+    <!-- Librerías de Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  </head>
+  <!-- Librerías de Firebase (App, Auth y Database) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+  <div class="topnav">
+    <h1>CONTROL GENERAL 4 RELES</h1>
+  </div>
+
+  <div class="content">
+    <div class="card-grid">
+
+      <!-- TARJETA DE INICIO DE SESIÓN (Visible si no hay sesión iniciada) -->
+      <div class="card" id="login-card">
+        <p class="card-title">ACCESO RESTRINGIDO</p>
+        <p class="relay-info">Inicia sesión para controlar los relés</p>
+        <p>
+          <input type="email" id="email" placeholder="Correo electrónico" style="width: 85%; padding: 10px; margin-bottom: 10px;">
+        </p>
+        <p>
+          <input type="password" id="password" placeholder="Contraseña" style="width: 85%; padding: 10px; margin-bottom: 10px;">
+        </p>
+        <p>
+          <button class="button-on" onclick="iniciarSesion()">ENTRAR</button>
+        </p>
+        <p id="login-error" style="color: red; font-size: 14px;"></p>
+      </div>
+
+      <!-- TARJETA DE CONTROL (Oculta hasta iniciar sesión) -->
+      <div class="card" id="control-card" style="display: none;">
+        <p class="card-title">CONTROL GENERAL</p>
+        <p class="relay-info">Una sola orden controla los cuatro relés</p>
+
+        <p>
+          <button class="button-on" onclick="cambiarEstado(true)">ENCENDER</button>
+        </p>
+
+        <p>
+          <button class="button-off" onclick="cambiarEstado(false)">APAGAR</button>
+        </p>
+
+        <hr>
+
+        <p class="state">
+          ESTADO GENERAL<br>
+          <span id="estado-texto">Cargando...</span>
+        </p>
+
+        <p class="relay-info">
+          RELE 1 - GPIO 23<br>
+          RELE 2 - GPIO 22<br>
+          RELE 3 - GPIO 21<br>
+          RELE 4 - GPIO 19
+        </p>
+
+        <hr>
+        <p>
+          <button class="button-off" style="padding: 8px 16px; font-size: 14px;" onclick="cerrarSesion()">CERRAR SESIÓN</button>
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // 1. Configuración de tu proyecto Firebase
+    const firebaseConfig = {
+  apiKey: "AIzaSyAivu2A1b5OFVqv8oBvrS5ZPW6dew7ORGI",
+  authDomain: "esp32-conexiones.firebaseapp.com",
+  databaseURL: "https://esp32-conexiones-default-rtdb.firebaseio.com",
+  projectId: "esp32-conexiones",
+  storageBucket: "esp32-conexiones.firebasestorage.app",
+  messagingSenderId: "861167533366",
+  appId: "1:861167533366:web:ebd015bb9ed7c19fc48797"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.database();
+    const refEstado = db.ref('reles/estadoGeneral');
+
+    // 2. Detectar si el usuario ya inició sesión o acaba de hacerlo
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        // Usuario autenticado: mostrar controles y escuchar base de datos
+        document.getElementById('login-card').style.display = 'none';
+        document.getElementById('control-card').style.display = 'block';
+        escucharEstado();
+      } else {
+        // Sin sesión: mostrar login y detener escucha
+        document.getElementById('login-card').style.display = 'block';
+        document.getElementById('control-card').style.display = 'none';
+        refEstado.off();
+      }
+    });
+
+    function iniciarSesion() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const errorMsg = document.getElementById('login-error');
+      errorMsg.innerText = "";
+
+      auth.signInWithEmailAndPassword(email, password)
+        .catch((error) => {
+          errorMsg.innerText = "Error: Usuario o contraseña incorrectos.";
+          console.error(error);
+        });
+    }
+
+    function cerrarSesion() {
+      auth.signOut();
+    }
+
+    function escucharEstado() {
+      refEstado.on('value', (snapshot) => {
+        const encendido = snapshot.val();
+        const spanEstado = document.getElementById('estado-texto');
+        if (encendido === true) {
+          spanEstado.innerText = "ENCENDIDO";
+          spanEstado.style.color = "green";
+        } else {
+          spanEstado.innerText = "APAGADO";
+          spanEstado.style.color = "red";
+        }
+      });
+    }
+
+    function cambiarEstado(nuevoEstado) {
+      refEstado.set(nuevoEstado)
+        .catch((error) => alert("Sin permisos para escribir: " + error.message));
+    }
+  </script>
+</body>
+</html>
